@@ -4,7 +4,9 @@ from matplotlib import pyplot as plt
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-def f(x): #Function, y = sin(x)
+
+
+def f(x):
     return np.sin(x)
 
 class network:
@@ -109,24 +111,20 @@ class network:
     
     def backpropogate(self,output,target): #dC/dW = (dZ/dW) * (dA/dZ) * (dC/dA), Z = unactivated output, A = activated output, C = cost function, W = weights matrix
         dC_dA = self.derivative_cost_respect_to_activation(output,target) #There was a loss associated with output and target. How much does the cost change with respect to the activated value ? 
-        #print("Output:",output)
+
         for i,l in enumerate(reversed(self.layers)): #Start at the Last layer, go up until the very firsy layer.
             if(l.isOutputLayer): continue
-
             if(l.input_vec.shape == ()):
                 z = (l.weights_matrix * l.input_vec).flatten() + l.bias_vec #Flatten to treat it as row-vector. 
             else:
                 z = l.weights_matrix @ l.input_vec + l.bias_vec
             
-            #print("Value of dC_dA:",dC_dA)
+
             activation_prev = l.input_vec
 
             #Compute the partial derivatives and then compute dC/dW in one line.
 
             dC_dZ = dC_dA * self.derivative_activation_respect_to_z(z) #Element-wise multiplication. Is dC/dZ. 
-            #print("Value of dC_dZ:",dC_dZ)
-            #print("Value of dA/dZ",self.derivative_activation_respect_to_z(z))
-            #print("Value of dZ_dW",self.derivative_z_respect_to_weights(activation_prev,z))
 
             dC_dW = np.outer(dC_dZ,self.derivative_z_respect_to_weights(activation_prev,z)) #
             dB = dC_dZ
@@ -136,11 +134,7 @@ class network:
 
             #Update dC_dA for next layer
             dC_dA = l.weights_matrix.T @ dC_dZ
-            #print("Shape of new gradient:",gradient.shape)
-            #print("SHAPE OF WEIGHTS gradient:",l.weights_gradient.shape)
-            #print("\n")
     def derivative_activation_respect_to_z(self,vec):
-        
         if(self.activation == 0):
             new_vec = []
             for x in vec:
@@ -172,7 +166,9 @@ class network:
             layer.bias_vec = layer.bias_vec - (self.learning_rate * layer.bias_gradient)
 
 
-
+            ##Clear the weights for the next iteration.
+            layer.weights_gradient = np.zeros(layer.weights_gradient.shape)
+            layer.bias_gradient = np.zeros(layer.weights_gradient.shape)
 
     def print_network(self):
         x = 1
@@ -235,6 +231,22 @@ class node(layer):
     def print(self):
         print("Node!",self.n_connections," connections")
 
+
+def train_network(n,epochs,X_train,y_train):
+    loss_per_val = []
+    loss_per_epoch = []
+    for epoch in range(epochs):
+        for i,x in enumerate(X_train):
+            outp = n.forward_pass(x)
+            loss = n.loss(outp,y_train[i])
+            loss_per_val.append(loss)
+            n.backpropogate(outp,y_train[i])
+            n.update_weights()
+        loss_per_epoch.append(sum(loss_per_val) / len(loss_per_val))
+   
+    return loss_per_epoch
+    
+
 iris = load_iris()
 X, y = iris.data, iris.target
 
@@ -243,48 +255,39 @@ scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 # Split into training and test set
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.5, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.5)
 
 
 
-epochs = 12
+epochs = 100
 n = network(n_features=4,n_outputs=1,density=6,learning_rate=0.01,n_layers=7)
 n.fully_connect()
 n.set_weights_bias()
-loss_per_val = []
-loss_per_epoch = []
-zeroing = False
-for epoch in range(epochs):
-    for i,x in enumerate(X_train):
-        outp = n.forward_pass(x)
-        loss = n.loss(outp,y_train[i])
-        loss_per_val.append(loss)
-        n.backpropogate(outp,y_train[i])
-        n.update_weights()
-    loss_per_epoch.append(sum(loss_per_val) / len(loss_per_val))
-    if(epoch != 0):
-        prev_epoch_loss = loss_per_epoch[epoch-1]
-    if(epoch == 1):
-        if(prev_epoch_loss - loss_per_epoch[epoch] < 0.15): # It's zeroing out.
-            print("Zeroing")
-            zeroing = True
-            break
-    loss_per_val = []
-print(loss_per_epoch)
 
-if(zeroing):
-    for l in n.layers:
-        print("Weights :",l.weights_matrix,"\nWeights gradient:",l.weights_gradient, "Bias:",l.bias_vec,"Bias gradient:",l.bias_gradient)
+
+loss_per_epoch = train_network(n,epochs,X_train,y_train)
+
+
+#print(loss_per_epoch)
 
 test_answers = []
 for i, x in enumerate(X_test):
     outp = n.forward_pass(x)
-    test_answers.append(outp)
+    test_answers.append(np.round(outp)) #Round the value in the case of classification. 
 plt.xlabel("Samples")
 plt.ylabel("Value")
 
 
 plt.plot(test_answers,label="Model prediction",linestyle=':')
 plt.plot(y_test,label="True value")
+
+
+wrong_count = 0
+for i,x in enumerate(test_answers):
+    if x != y_test[i]:
+        wrong_count = wrong_count + 1
+
+print("Testing accuracy:",(1 - (wrong_count / len(test_answers))))
+
 plt.legend()
 plt.show()
